@@ -20,44 +20,43 @@ requiredPackages.forEach(pkg => {
   }
 });
 
-function mergeVideos(directoryPath, outputFilename) {
-  const videoFiles = fs.readdirSync(directoryPath)
-  .filter(file => file.toLowerCase().endsWith('.mp4'))
-  .map(file => path.join(directoryPath, file));
+async function mergeVideos(directoryPath, outputFilename) {
+  return new Promise((resolve, reject) => {
+    const videoFiles = fs.readdirSync(directoryPath)
+    .filter(file => file.toLowerCase().endsWith('.mp4'))
+    .map(file => path.join(directoryPath, file));
 
-  if (!videoFiles.length) {
-    console.log(`Keine MP4-Dateien im Verzeichnis "${directoryPath}" gefunden.`);
-    return;
-  }
+    if (!videoFiles.length) {
+      console.log(`Keine MP4-Dateien im Verzeichnis "${directoryPath}" gefunden.`);
+      resolve();
+      return;
+    }
 
-  let bar;
+    // Create a list for the concat demuxer
+    const listFilePath = path.join(directoryPath, 'mylist.txt');
+    const listContent = videoFiles.map(file => `file '${file}'`).join('\n');
+    fs.writeFileSync(listFilePath, listContent);
 
-  ffmpeg()
-  .on('start', () => {
-    console.log(`Beginne das Zusammenführen für: ${outputFilename}`);
-    bar = new ProgressBar(':bar :percent :etas', {
-      total: 100,
-      width: 40,
-      complete: '=',
-      incomplete: ' ',
-    });
-  })
-  .on('progress', (progress) => {
-    bar.update(progress.percent / 100);
-  })
-  .on('end', () => {
-    console.log(`\nVideos wurden zu "${outputFilename}" zusammengeführt.`);
-  })
-  .on('error', (err) => {
-    console.error(`\nFehler beim Zusammenführen: ${err.message}`);
-  })
-  .mergeAdd(videoFiles[0])  // erstes Video hinzufügen
-      .mergeToFile(outputFilename, path.dirname(outputFilename));
-
-  for (let i = 1; i < videoFiles.length; i++) {
-    ffmpeg().mergeAdd(videoFiles[i]);  // Restliche Videos hinzufügen
-  }
+    ffmpeg()
+    .input(listFilePath)
+    .inputOptions(['-f concat', '-safe 0'])
+    .outputOptions(['-c copy'])
+    .on('start', () => {
+      console.log(`Beginne das Zusammenführen für: ${outputFilename}`);
+    })
+    .on('end', () => {
+      console.log(`\nVideos wurden zu "${outputFilename}" zusammengeführt.`);
+      fs.unlinkSync(listFilePath);  // Remove the temporary list file
+      resolve();
+    })
+    .on('error', (err) => {
+      console.error(`\nFehler beim Zusammenführen: ${err.message}`);
+      reject(err);
+    })
+    .save(outputFilename);
+  });
 }
+
 
 const cwd = process.cwd();
 const subdirectories = fs.readdirSync(cwd, { withFileTypes: true })
@@ -69,8 +68,10 @@ if (!subdirectories.length) {
   process.exit(1);
 }
 
-subdirectories.forEach(dir => {
-  const sanitizedDir = dir.replace(/ /g, '_');  // Leerzeichen durch Unterstriche ersetzen
-  const outputPath = path.join(cwd, `${sanitizedDir}.mp4`);
-  mergeVideos(path.join(cwd, dir), outputPath);
-});
+(async function() {
+  for (const dir of subdirectories) {
+    const sanitizedDir = dir.replace(/ /g, '_');  // Leerzeichen durch Unterstriche ersetzen
+    const outputPath = path.join(cwd, `${sanitizedDir}.mp4`);
+    await mergeVideos(path.join(cwd, dir), outputPath);
+  }
+})();
