@@ -1,0 +1,15 @@
+{
+  "name": "video-merge",
+  "version": "1.0.0",
+  "description": "Merge MP4 Videos to one File",
+  "main": "index.js",
+  "author": "Boris Schauer <me@bschauer.de>",
+  "license": "GPL-3.0",
+  "bin": {
+    "video-merge": "./index.js"
+  },
+  "dependencies": {
+    "fluent-ffmpeg": "^2.1.2",
+    "progress": "^2.0.3"
+  }
+}
